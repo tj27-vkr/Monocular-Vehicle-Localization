@@ -85,8 +85,42 @@ def parse_annotation(label_dir, image_dir):
             
     return all_objs, dims_avg
 
-
 all_objs, dims_avg = parse_annotation(label_dir, image_dir)
+
+for obj in all_objs:
+    # Fix dimensions
+    obj['dims'] = obj['dims'] - dims_avg[obj['name']]
+    
+    # Fix orientation and confidence for no flip
+    orientation = np.zeros((BIN,2))
+    confidence = np.zeros(BIN)
+    
+    anchors = compute_anchors(obj['new_alpha'])
+    
+    for anchor in anchors:
+        orientation[anchor[0]] = np.array([np.cos(anchor[1]), np.sin(anchor[1])])
+        confidence[anchor[0]] = 1.
+        
+    confidence = confidence / np.sum(confidence)
+        
+    obj['orient'] = orientation
+    obj['conf'] = confidence
+        
+    # Fix orientation and confidence for flip
+    orientation = np.zeros((BIN,2))
+    confidence = np.zeros(BIN)
+    
+    anchors = compute_anchors(2.*np.pi - obj['new_alpha'])
+    
+    for anchor in anchors:
+        orientation[anchor[0]] = np.array([np.cos(anchor[1]), np.sin(anchor[1])])
+        confidence[anchor[0]] = 1
+        
+    confidence = confidence / np.sum(confidence)
+        
+    obj['orient_flipped'] = orientation
+    obj['conf_flipped'] = confidence
+
 
 def prepare_input_and_output(train_inst):
     ### Prepare image patch
@@ -228,7 +262,6 @@ confidence  = Dense(BIN, activation='softmax', name='confidence')(confidence)
 model = Model(inputs, outputs=[dimension, orientation, confidence])
 
 
-
 def orientation_loss(y_true, y_pred):
     # Find number of anchors
     anchors = tf.reduce_sum(tf.square(y_true), axis=2)
@@ -242,75 +275,31 @@ def orientation_loss(y_true, y_pred):
     
     return tf.reduce_mean(loss)
 
-print("Loading weights...")
-model.load_weights('model/weights.hdf5')
-print("Done...")
 
-image_dir = '/home/vkvigneshram/disk/monodepth_wb/custom/example_data/images/'
-box2d_loc = '/home/vkvigneshram/disk/monodepth_wb/custom/example_data/labels/'
-box3d_loc = '/home/vkvigneshram/disk/monodepth_wb/custom/example_data/output3d/'
- 
-all_image = sorted(os.listdir(image_dir))
-#np.random.shuffle(all_image)
+early_stop  = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=10, mode='min', verbose=1)
+checkpoint  = ModelCheckpoint('weights.hdf5', monitor='val_loss', verbose=1, save_best_only=True, mode='min', period=1)
+tensorboard = TensorBoard(log_dir='logs/', histogram_freq=0, write_graph=True, write_images=False)
 
-for f in all_image:
-    image_file = image_dir + f
-    box2d_file = box2d_loc + f.replace('png', 'txt')
-    box3d_file = box3d_loc + f.replace('png', 'txt')
-    
-    with open(box3d_file, 'w') as box3d:
-        img = cv2.imread(image_file)
-        img = img.astype(np.float32, copy=False)
+all_exams  = len(all_objs)
+trv_split  = int(0.9*all_exams)
+batch_size = 8
+np.random.shuffle(all_objs)
 
-        for line in open(box2d_file):
-            line = line.strip().split(' ')
-            truncated = np.abs(float(line[1]))
-            occluded  = np.abs(float(line[2]))
+train_gen = data_gen(all_objs[:trv_split],          batch_size)
+valid_gen = data_gen(all_objs[trv_split:all_exams], batch_size)
 
-            obj = {'xmin':int(float(line[4])),
-                   'ymin':int(float(line[5])),
-                   'xmax':int(float(line[6])),
-                   'ymax':int(float(line[7])),
-                  }
+train_num = int(np.ceil(trv_split/batch_size))
+valid_num = int(np.ceil((all_exams - trv_split)/batch_size))
 
-            patch = img[obj['ymin']:obj['ymax'],obj['xmin']:obj['xmax']]
-            patch = cv2.resize(patch, (NORM_H, NORM_W))
-            patch = patch - np.array([[[103.939, 116.779, 123.68]]])
-            patch = np.expand_dims(patch, 0)
-
-            prediction = model.predict(patch)
-
-            # Transform regressed angle
-            max_anc = np.argmax(prediction[2][0])
-            anchors = prediction[1][0][max_anc]
-
-            if anchors[1] > 0:
-                angle_offset = np.arccos(anchors[0])
-            else:
-                angle_offset = -np.arccos(anchors[0])
-
-            wedge = 2.*np.pi/BIN
-            angle_offset = angle_offset + max_anc*wedge
-            angle_offset = angle_offset % (2.*np.pi)
-
-            angle_offset = angle_offset - np.pi/2
-            if angle_offset > np.pi:
-                angle_offset = angle_offset - (2.*np.pi)
-
-            line[3] = str(angle_offset)
-
-            # Transform regressed dimension
-            dims = dims_avg['Car'] + prediction[0][0]
-
-            line = line + list(dims)
-
-            # Write regressed 3D dim and oritent to file
-            line = ' '.join([str(item) for item in line]) + '\n'
-            box3d.write(line)
-
-            cv2.rectangle(img, (obj['xmin'],obj['ymin']), (obj['xmax'],obj['ymax']), (255,0,0), 3)
-            cv2.imwrite("example_data/output3d/output.png",img)
-    
-    #plt.figure(figsize=(10,10))
-    #plt.imshow(img/255.); plt.show()
-    print("Output generated.")
+minimizer  = SGD(lr=0.0001)
+model.compile(optimizer='adam',#minimizer,
+              loss={'dimension': 'mean_squared_error', 'orientation': orientation_loss, 'confidence': 'mean_squared_error'},
+                  loss_weights={'dimension': 1., 'orientation': 1., 'confidence': 1.})
+model.fit_generator(generator = train_gen, 
+                    steps_per_epoch = train_num, 
+                    epochs = 500, 
+                    verbose = 1, 
+                    validation_data = valid_gen, 
+                    validation_steps = valid_num, 
+                    callbacks = [early_stop, checkpoint, tensorboard], 
+                    max_q_size = 3)
