@@ -4,7 +4,6 @@ from keras.layers.convolutional import Conv2D, Convolution2D, MaxPooling2D, Zero
 from keras.optimizers import SGD
 import tensorflow as tf
 from keras import backend as K
-from IPython.display import SVG
 from keras.utils.vis_utils import model_to_dot
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers import Input, Dense
@@ -16,19 +15,8 @@ import cv2, os
 import numpy as np
 from random import shuffle
 
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
-
-BIN, OVERLAP = 2, 0.1
-W = 1.
-ALPHA = 1.
-MAX_JIT = 3
-NORM_H, NORM_W = 224, 224
-VEHICLES = ['Car', 'Truck', 'Van', 'Tram']
-BATCH_SIZE = 8
-
-label_dir = '/home/vkvigneshram/disk/monodepth_wb/custom/dataset/labels/training/label_2/'
-image_dir = '/home/vkvigneshram/disk/monodepth_wb/custom/dataset/images/training/image_2/'
+from macros import *
+import dn_model
 
 def compute_anchors(angle):
     anchors = []
@@ -45,8 +33,6 @@ def compute_anchors(angle):
         
     return anchors
 
-def compute_angle(anchors):
-    pass
 
 def parse_annotation(label_dir, image_dir):
     all_objs = []
@@ -203,63 +189,7 @@ def data_gen(all_objs, batch_size):
         r_bound = r_bound + batch_size
         if r_bound > num_obj: r_bound = num_obj
 
-def l2_normalize(x):
-    return tf.nn.l2_normalize(x, dim=2)
 
-
-
-# Construct the network
-inputs = Input(shape=(224,224,3))
-# Block 1
-x = Conv2D(64, (3, 3), activation='relu', padding='same', name='block1_conv1')(inputs)
-x = Conv2D(64, (3, 3), activation='relu', padding='same', name='block1_conv2')(x)
-x = MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool')(x)
-
-# Block 2
-x = Conv2D(128, (3, 3), activation='relu', padding='same', name='block2_conv1')(x)
-x = Conv2D(128, (3, 3), activation='relu', padding='same', name='block2_conv2')(x)
-x = MaxPooling2D((2, 2), strides=(2, 2), name='block2_pool')(x)
-
-# Block 3
-x = Conv2D(256, (3, 3), activation='relu', padding='same', name='block3_conv1')(x)
-x = Conv2D(256, (3, 3), activation='relu', padding='same', name='block3_conv2')(x)
-x = Conv2D(256, (3, 3), activation='relu', padding='same', name='block3_conv3')(x)
-x = MaxPooling2D((2, 2), strides=(2, 2), name='block3_pool')(x)
-
-# Block 4
-x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block4_conv1')(x)
-x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block4_conv2')(x)
-x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block4_conv3')(x)
-x = MaxPooling2D((2, 2), strides=(2, 2), name='block4_pool')(x)
-
-# Block 5
-x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block5_conv1')(x)
-x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block5_conv2')(x)
-x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block5_conv3')(x)
-x = MaxPooling2D((2, 2), strides=(2, 2), name='block5_pool')(x)
-
-x = Flatten()(x)
-
-dimension   = Dense(512)(x)
-dimension   = LeakyReLU(alpha=0.1)(dimension)
-dimension   = Dropout(0.5)(dimension)
-dimension   = Dense(3)(dimension)
-dimension   = LeakyReLU(alpha=0.1, name='dimension')(dimension)
-
-orientation = Dense(256)(x)
-orientation = LeakyReLU(alpha=0.1)(orientation)
-orientation = Dropout(0.5)(orientation)
-orientation = Dense(BIN*2)(orientation)
-orientation = LeakyReLU(alpha=0.1)(orientation)
-orientation = Reshape((BIN,-1))(orientation)
-orientation = Lambda(l2_normalize, name='orientation')(orientation)
-
-confidence  = Dense(256)(x)
-confidence  = LeakyReLU(alpha=0.1)(confidence)
-confidence  = Dropout(0.5)(confidence)
-confidence  = Dense(BIN, activation='softmax', name='confidence')(confidence)
-
-model = Model(inputs, outputs=[dimension, orientation, confidence])
 
 
 def orientation_loss(y_true, y_pred):
@@ -276,30 +206,33 @@ def orientation_loss(y_true, y_pred):
     return tf.reduce_mean(loss)
 
 
-early_stop  = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=10, mode='min', verbose=1)
-checkpoint  = ModelCheckpoint('weights.hdf5', monitor='val_loss', verbose=1, save_best_only=True, mode='min', period=1)
-tensorboard = TensorBoard(log_dir='logs/', histogram_freq=0, write_graph=True, write_images=False)
 
-all_exams  = len(all_objs)
-trv_split  = int(0.9*all_exams)
-batch_size = 8
-np.random.shuffle(all_objs)
+def train_model():
+	model = dn_model.network_arch()
+	early_stop  = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=10, mode='min', verbose=1)
+	checkpoint  = ModelCheckpoint('weights.hdf5', monitor='val_loss', verbose=1, save_best_only=True, mode='min', period=1)
+	tensorboard = TensorBoard(log_dir='logs/', histogram_freq=0, write_graph=True, write_images=False)
 
-train_gen = data_gen(all_objs[:trv_split],          batch_size)
-valid_gen = data_gen(all_objs[trv_split:all_exams], batch_size)
+	all_exams  = len(all_objs)
+	trv_split  = int(0.9*all_exams)
+	batch_size = 8
+	np.random.shuffle(all_objs)
 
-train_num = int(np.ceil(trv_split/batch_size))
-valid_num = int(np.ceil((all_exams - trv_split)/batch_size))
+	train_gen = data_gen(all_objs[:trv_split],          batch_size)
+	valid_gen = data_gen(all_objs[trv_split:all_exams], batch_size)
 
-minimizer  = SGD(lr=0.0001)
-model.compile(optimizer='adam',#minimizer,
-              loss={'dimension': 'mean_squared_error', 'orientation': orientation_loss, 'confidence': 'mean_squared_error'},
-                  loss_weights={'dimension': 1., 'orientation': 1., 'confidence': 1.})
-model.fit_generator(generator = train_gen, 
-                    steps_per_epoch = train_num, 
-                    epochs = 500, 
-                    verbose = 1, 
-                    validation_data = valid_gen, 
-                    validation_steps = valid_num, 
-                    callbacks = [early_stop, checkpoint, tensorboard], 
-                    max_q_size = 3)
+	train_num = int(np.ceil(trv_split/batch_size))
+	valid_num = int(np.ceil((all_exams - trv_split)/batch_size))
+
+	minimizer  = SGD(lr=0.0001)
+	model.compile(optimizer='adam',#minimizer,
+		      loss={'dimension': 'mean_squared_error', 'orientation': orientation_loss, 'confidence': 'mean_squared_error'},
+			  loss_weights={'dimension': 1., 'orientation': 1., 'confidence': 1.})
+	model.fit_generator(generator = train_gen, 
+			    steps_per_epoch = train_num, 
+			    epochs = 500, 
+			    verbose = 1, 
+			    validation_data = valid_gen, 
+	                    validation_steps = valid_num, 
+	                    callbacks = [early_stop, checkpoint, tensorboard], 
+	                    max_q_size = 3)
