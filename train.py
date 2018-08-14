@@ -15,7 +15,7 @@ import cv2, os
 import numpy as np
 from random import shuffle
 
-from macros import *
+from config import *
 import dn_model
 
 def compute_anchors(angle):

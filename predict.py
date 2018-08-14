@@ -16,7 +16,7 @@ import numpy as np
 from random import shuffle
 
 
-from macros import *
+from config import *
 import dn_model
 
 def parse_annotation(label_dir, image_dir):
@@ -70,10 +70,6 @@ def predict_images():
 	model.load_weights('model/weights.hdf5')
 	print("Done...")
 
-	ex_image_dir = '/home/vkvigneshram/disk/monodepth_wb/custom/example_data/images/'
-	box2d_loc = '/home/vkvigneshram/disk/monodepth_wb/custom/example_data/labels/'
-	box3d_loc = '/home/vkvigneshram/disk/monodepth_wb/custom/example_data/output3d/'
-	 
 	all_image = sorted(os.listdir(ex_image_dir))
 	#np.random.shuffle(all_image)
 

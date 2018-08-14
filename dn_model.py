@@ -15,6 +15,7 @@ import cv2, os
 import numpy as np
 from random import shuffle
 
+from config import *
 
 def l2_normalize(x):
     return tf.nn.l2_normalize(x, dim=2)
