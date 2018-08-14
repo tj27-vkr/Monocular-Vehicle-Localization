@@ -129,6 +129,6 @@ def predict_images():
 		    box3d.write(line)
 
 		    cv2.rectangle(img, (obj['xmin'],obj['ymin']), (obj['xmax'],obj['ymax']), (255,0,0), 3)
-		    cv2.imwrite("example_data/output3d/output.png",img)
+		    cv2.imwrite("example_data/output3d/{}".format(f),img)
 	    
 	    print("Output generated for image {}".format(f))

@@ -128,6 +128,7 @@ for f in all_image:
             cv2.line(image, (point_1_[0], point_1_[1]), (point_2_[0], point_2_[1]), (0,255,0), 2)
                 
     #video_writer.write(np.uint8(image))
-    cv2.imwrite("out_now.png",image)
+    cv2.imwrite("example_data/output_predi/{}".format(f),image)
+    print ("{} generated.".format(f))
 
 print("Done.")

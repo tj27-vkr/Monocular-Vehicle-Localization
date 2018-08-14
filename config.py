@@ -20,6 +20,7 @@ image_dir = '/home/vkvigneshram/disk/monodepth_wb/custom/dataset/images/training
 #example images and label directories
 ex_image_dir = '/home/vkvigneshram/disk/monodepth_wb/custom/example_data/images/'
 ex_label_dir = '/home/vkvigneshram/disk/monodepth_wb/custom/example_data/labels/'
+
 box2d_loc = ex_label_dir
 
 #predicted 3d box output file directory
