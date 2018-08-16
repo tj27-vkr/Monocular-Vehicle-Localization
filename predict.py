@@ -1,28 +1,19 @@
-from keras.models import Sequential
-from keras.layers.core import Flatten, Dense, Dropout, Reshape, Lambda
-from keras.layers.convolutional import Conv2D, Convolution2D, MaxPooling2D, ZeroPadding2D
-from keras.optimizers import SGD
-import tensorflow as tf
-from keras import backend as K
-from keras.utils.vis_utils import model_to_dot
-from keras.layers.advanced_activations import LeakyReLU
-from keras.layers import Input, Dense
-from keras.models import Model
-import matplotlib.pyplot as plt
-from keras.callbacks import TensorBoard, EarlyStopping, ModelCheckpoint
-import copy
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""Process the image and predict output
+"""
+
 import cv2, os
 import numpy as np
-from random import shuffle
-
 
 from config import *
 import dn_model
 
-def parse_annotation(label_dir, image_dir):
+def labels_parse(label_dir, image_dir):
     all_objs = []
-    dims_avg = {key:np.array([0, 0, 0]) for key in VEHICLES}
-    dims_cnt = {key:0 for key in VEHICLES}
+    dims_avg = {key:np.array([0, 0, 0]) for key in VEHICLE_CLASSES}
+    dims_cnt = {key:0 for key in VEHICLE_CLASSES}
         
     for label_file in os.listdir(label_dir):
         image_file = label_file.replace('txt', 'png')
@@ -32,7 +23,7 @@ def parse_annotation(label_dir, image_dir):
             truncated = np.abs(float(line[1]))
             occluded  = np.abs(float(line[2]))
 
-            if line[0] in VEHICLES and truncated < 0.1 and occluded < 0.1:
+            if line[0] in VEHICLE_CLASSES and truncated < 0.1 and occluded < 0.1:
                 new_alpha = float(line[3]) + np.pi/2.
                 if new_alpha < 0:
                     new_alpha = new_alpha + 2.*np.pi
@@ -57,7 +48,7 @@ def parse_annotation(label_dir, image_dir):
     return all_objs, dims_avg
 
 
-all_objs, dims_avg = parse_annotation(label_dir, image_dir)
+all_objs, dims_avg = labels_parse(label_dir, image_dir)
 
 
 
@@ -71,18 +62,17 @@ def predict_images():
 	print("Done...")
 
 	all_image = sorted(os.listdir(ex_image_dir))
-	#np.random.shuffle(all_image)
 
 	for f in all_image:
 	    image_file = ex_image_dir + f
-	    box2d_file = box2d_loc + f.replace('png', 'txt')
-	    box3d_file = box3d_loc + f.replace('png', 'txt')
+	    box2d_file = detection2d_dir + f.replace('png', 'txt')
+	    box3d_file = detection3d_dir + f.replace('png', 'txt')
 	    
 	    with open(box3d_file, 'w') as box3d:
-		img = cv2.imread(image_file)
-		img = img.astype(np.float32, copy=False)
+	        img = cv2.imread(image_file)
+	        img = img.astype(np.float32, copy=False)
 
-		for line in open(box2d_file):
+	        for line in open(box2d_file):
 		    line = line.strip().split(' ')
 		    truncated = np.abs(float(line[1]))
 		    occluded  = np.abs(float(line[2]))
@@ -93,12 +83,17 @@ def predict_images():
 			   'ymax':int(float(line[7])),
 			  }
 
+		    #cropping the image based on the 2d prediction
 		    patch = img[obj['ymin']:obj['ymax'],obj['xmin']:obj['xmax']]
 		    patch = cv2.resize(patch, (NORM_H, NORM_W))
+
+		    #normalizing the dataset by subtracting the mean pixel value
 		    patch = patch - np.array([[[103.939, 116.779, 123.68]]])
 		    patch = np.expand_dims(patch, 0)
-
+		    
+		    #run the model for 3d prediction
 		    prediction = model.predict(patch)
+		    #print("The prediction: {}".format(prediction))
 
 		    # Transform regressed angle
 		    max_anc = np.argmax(prediction[2][0])
@@ -123,6 +118,7 @@ def predict_images():
 		    dims = dims_avg['Car'] + prediction[0][0]
 
 		    line = line + list(dims)
+		    #print("$$$$${}".format(line))
 
 		    # Write regressed 3D dim and oritent to file
 		    line = ' '.join([str(item) for item in line]) + '\n'
@@ -132,3 +128,8 @@ def predict_images():
 		    cv2.imwrite("example_data/output3d/{}".format(f),img)
 	    
 	    print("Output generated for image {}".format(f))
+
+
+
+if __name__ == "__main__":
+    predict_images()

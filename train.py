@@ -1,14 +1,11 @@
-from keras.models import Sequential
-from keras.layers.core import Flatten, Dense, Dropout, Reshape, Lambda
-from keras.layers.convolutional import Conv2D, Convolution2D, MaxPooling2D, ZeroPadding2D
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""Train the neural network with KITTI dataset
+"""
+
 from keras.optimizers import SGD
 import tensorflow as tf
-from keras import backend as K
-from keras.utils.vis_utils import model_to_dot
-from keras.layers.advanced_activations import LeakyReLU
-from keras.layers import Input, Dense
-from keras.models import Model
-import matplotlib.pyplot as plt
 from keras.callbacks import TensorBoard, EarlyStopping, ModelCheckpoint
 import copy
 import cv2, os
@@ -34,10 +31,10 @@ def compute_anchors(angle):
     return anchors
 
 
-def parse_annotation(label_dir, image_dir):
+def labels_parse(label_dir, image_dir):
     all_objs = []
-    dims_avg = {key:np.array([0, 0, 0]) for key in VEHICLES}
-    dims_cnt = {key:0 for key in VEHICLES}
+    dims_avg = {key:np.array([0, 0, 0]) for key in VEHICLE_CLASSES}
+    dims_cnt = {key:0 for key in VEHICLE_CLASSES}
         
     for label_file in os.listdir(label_dir):
         image_file = label_file.replace('txt', 'png')
@@ -47,7 +44,7 @@ def parse_annotation(label_dir, image_dir):
             truncated = np.abs(float(line[1]))
             occluded  = np.abs(float(line[2]))
 
-            if line[0] in VEHICLES and truncated < 0.1 and occluded < 0.1:
+            if line[0] in VEHICLE_CLASSES and truncated < 0.1 and occluded < 0.1:
                 new_alpha = float(line[3]) + np.pi/2.
                 if new_alpha < 0:
                     new_alpha = new_alpha + 2.*np.pi
@@ -71,7 +68,7 @@ def parse_annotation(label_dir, image_dir):
             
     return all_objs, dims_avg
 
-all_objs, dims_avg = parse_annotation(label_dir, image_dir)
+all_objs, dims_avg = labels_parse(label_dir, image_dir)
 
 for obj in all_objs:
     # Fix dimensions
@@ -108,44 +105,30 @@ for obj in all_objs:
     obj['conf_flipped'] = confidence
 
 
-def prepare_input_and_output(train_inst):
-    ### Prepare image patch
-    xmin = train_inst['xmin'] #+ np.random.randint(-MAX_JIT, MAX_JIT+1)
-    ymin = train_inst['ymin'] #+ np.random.randint(-MAX_JIT, MAX_JIT+1)
-    xmax = train_inst['xmax'] #+ np.random.randint(-MAX_JIT, MAX_JIT+1)
-    ymax = train_inst['ymax'] #+ np.random.randint(-MAX_JIT, MAX_JIT+1)
+def process_data(train_inst):
+    #Crop image
+    xmin = train_inst['xmin']
+    ymin = train_inst['ymin']
+    xmax = train_inst['xmax']
+    ymax = train_inst['ymax']
     
     img = cv2.imread(image_dir + train_inst['image'])
-    #print ("....{}....{}....".format(image_dir, train_inst['image']))
-    #print ("...{}...".format(img))
     img = copy.deepcopy(img[ymin:ymax+1,xmin:xmax+1]).astype(np.float32)
-    
-    # re-color the image
-    #img += np.random.randint(-2, 3, img.shape).astype('float32')
-    #t  = [np.random.uniform()]
-    #t += [np.random.uniform()]
-    #t += [np.random.uniform()]
-    #t = np.array(t)
-
-    #img = img * (1 + t)
-    #img = img / (255. * 2.)
 
     # flip the image
     flip = np.random.binomial(1, .5)
     if flip > 0.5: img = cv2.flip(img, 1)
         
-    # resize the image to standard size
+    # resize the image and subtract the pixel mean
     img = cv2.resize(img, (NORM_H, NORM_W))
     img = img - np.array([[[103.939, 116.779, 123.68]]])
-    #img = img[:,:,::-1]
     
-    ### Fix orientation and confidence
     if flip > 0.5:
         return img, train_inst['dims'], train_inst['orient_flipped'], train_inst['conf_flipped']
     else:
         return img, train_inst['dims'], train_inst['orient'], train_inst['conf']
 
-def data_gen(all_objs, batch_size):
+def generate_data(all_objs, batch_size):
     num_obj = len(all_objs)
     
     keys = range(num_obj)
@@ -168,14 +151,8 @@ def data_gen(all_objs, batch_size):
         
         for key in keys[l_bound:r_bound]:
             # augment input image and fix object's orientation and confidence
-            image, dimension, orientation, confidence = prepare_input_and_output(all_objs[key])
-            
-            #plt.figure(figsize=(5,5))
-            #plt.imshow(image/255./2.); plt.show()
-            #print dimension
-            #print orientation
-            #print confidence
-            
+            image, dimension, orientation, confidence = process_data(all_objs[key])
+           
             x_batch[currt_inst, :] = image
             d_batch[currt_inst, :] = dimension
             o_batch[currt_inst, :] = orientation
@@ -218,8 +195,8 @@ def train_model():
 	batch_size = 8
 	np.random.shuffle(all_objs)
 
-	train_gen = data_gen(all_objs[:trv_split],          batch_size)
-	valid_gen = data_gen(all_objs[trv_split:all_exams], batch_size)
+	train_gen = generate_data(all_objs[:trv_split],          batch_size)
+	valid_gen = generate_data(all_objs[trv_split:all_exams], batch_size)
 
 	train_num = int(np.ceil(trv_split/batch_size))
 	valid_num = int(np.ceil((all_exams - trv_split)/batch_size))
