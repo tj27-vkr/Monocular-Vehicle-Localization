@@ -63,7 +63,7 @@ For training, [KITTI 3d detection dataset](http://www.cvlibs.net/datasets/kitti/
                      detection, needed for p/r curves, higher is better.
 ```
 
-For the final prediction, the bbox data is provided 2d object detection model `ssd_detection.py` which uses pretrained Tensorflow COCOmobilenet to output a 2d bounding box.
+For the final prediction, the bbox data is provided by the 2d object detection model `ssd_detection.py` which uses pretrained Tensorflow COCOmobilenet to output a 2d bounding box.
 
 ## Ouput
 
