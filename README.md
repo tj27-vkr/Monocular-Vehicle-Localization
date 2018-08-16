@@ -1,4 +1,4 @@
-# Vehicle-Pose-Estimation-Monocular-Vision (In Progress)
+# Vehicle-Pose-Estimation-Monocular-Vision
 
 ## Introduction
 
@@ -77,3 +77,4 @@ The below images are the ouput from the partially trained model on 8 vCPUs, 52 G
 
 + "3D Bounding Box Estimation Using Deep Learning and Geometry" [link to paper](https://arxiv.org/abs/1612.00496)
 + [Tensorflow object detection](https://github.com/tensorflow/models)
++ [smallcorgi/3D-Deepbox](https://github.com/smallcorgi/3D-Deepbox)
