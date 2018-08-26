@@ -6,8 +6,13 @@
 
 The model is trained on KITTI dataset for 3d object detection. The prediction is made little efficient by detecting the 2d bounding frames with a separate NN model and running the Pose estimation on the particular frame.
 
-The 2d detection is done with a simple SSD Tensorflow object detection pretrained model for now; can be optimized with a standalone vehicle detection model. The 3d prediction model is constructed of CNN layers and outputs the dimension and the orientation of the detected object.
-    
+The 2d detection is done with a simple SSD Tensorflow object detection pretrained model for now; can be optimized with a standalone vehicle detection model. The 3d prediction model is constructed of CNN layers and outputs the dimension and the orientation of the detected object. The traditional approach utilizes a model that regresses the 3d coordinates of the object detected. Here, [monodepth](https://github.com/mrharicot/monodepth) model is used to determine the depth of the object detected and the corresponding x,y position in the camera coordinates is calculated by stereo vision triangulation. This helps in the precise perception of the environment.
+
+## Architecture
+   
+   <img src="./example_data/architecture.png" width = "562" height = "312" align=center />
+
+
 ## Prerequisites
   + Python 2
   + Tensorflow
@@ -40,7 +45,7 @@ python main.py --mode=predict
 
 ## Dataset 
 
-For training, [KITTI 3d detection dataset](http://www.cvlibs.net/datasets/kitti/eval_object.php?obj_benchmark=3d) was used. Below mentioned table from KITTI object development kit describes the data in the labeles file.
+For training, [KITTI 3d detection dataset](http://www.cvlibs.net/datasets/kitti/eval_object.php?obj_benchmark=3d) was used. Note that the location of the object is in camera coordinates, which is defined to be `camera- x:right y:down z:forward` Below mentioned table from KITTI object development kit describes the data in the labeles file.
 
 ```
 #Values    Name      Description
@@ -75,6 +80,8 @@ The below images are the ouput from the partially trained model on 8 vCPUs, 52 G
 
 ## References
 
++ [Vision meets Robotics: The KITTI Dataset](http://www.cvlibs.net/publications/Geiger2013IJRR.pdf)
 + "3D Bounding Box Estimation Using Deep Learning and Geometry" [link to paper](https://arxiv.org/abs/1612.00496)
 + [Tensorflow object detection](https://github.com/tensorflow/models)
 + [smallcorgi/3D-Deepbox](https://github.com/smallcorgi/3D-Deepbox)
++ [mrharicot/monodepth](https://github.com/mrharicot/monodepth)

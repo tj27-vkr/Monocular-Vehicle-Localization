@@ -10,7 +10,7 @@ import cv2
 import os
 
 from config import *
-
+import depth_map
 
 def evaluate3d_detection():
 	all_image = sorted(os.listdir(ex_image_dir))
@@ -48,6 +48,10 @@ def evaluate3d_detection():
 		    center = center.astype(np.int16)
 
 		    centers_2d.append(center)
+		    """
+		    line[11] = center[0]
+		    line[12] = center[1]
+		    """
 		    centers_3d.append(np.asarray([float(number) for number in line[11:14]]))
 
 		# Find the nearest centres among the candidates
@@ -112,7 +116,13 @@ def evaluate3d_detection():
 		dims   = np.asarray([float(number) for number in line[8:11]])
 		center = np.asarray([float(number) for number in line[11:14]])
 		rot_y  = float(line[3]) + np.arctan(center[0]/center[2])#float(line[14])
-
+		center_xy = np.dot(cam_to_img, np.append(center, 1))
+		center_xy = center_xy[:2]/center_xy[2]
+		center_xy = center_xy.astype(np.int16)
+		print("========{}==================>{}".format(line[0],center_xy))
+		cneter_2d = np.asarray([(float(line[4])+float(line[6]))/2., (float(line[5])+float(line[7]))/2.])
+		depth_z = depth_map.get_depth_from_pixel(image_file,cneter_2d[0],cneter_2d[1])
+		print("========pixel: {}============gt: {}======>{}\n".format(cneter_2d, center[2], depth_z))
 		box_3d = []
 
 		for i in [1,-1]:
@@ -125,6 +135,7 @@ def evaluate3d_detection():
 
 			    point = np.append(point, 1)
 			    point = np.dot(cam_to_img, point)
+			    #print("point on cam {}".format(point))
 			    point = point[:2]/point[2]
 			    point = point.astype(np.int16)
 			    box_3d.append(point)
