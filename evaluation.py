@@ -18,7 +18,6 @@ def evaluate3d_detection():
 	for f in all_image:
 	    image_file = ex_image_dir + f
 	    box3d_file = detection3d_dir + f.replace('png', 'txt')
-	    label_file = ex_label_dir + f.replace('png', 'txt')
 	    calib_file = calib_dir + f.replace('png', 'txt')
 	    output_file = output_dir + f.replace('png', 'txt')
 	    
@@ -33,26 +32,28 @@ def evaluate3d_detection():
 			cam_to_img = np.asarray([float(number) for number in cam_to_img[1:]])
 			cam_to_img = np.reshape(cam_to_img, (3,4))
 
-		for line in open(label_file):
+		for line in open(box3d_file):
 		    line = line.strip().split(' ')
 
-		    center = np.asarray([float(number) for number in line[11:14]])
-		    center = np.append(center, 1)
-#		    print("################ camtoimg : {}, center: {}".format(cam_to_img, center))
-		    center = np.dot(cam_to_img, center)
-#		    print("center from the file: {}".format(center))
-		    center = center[:2]/center[2]
-		    x_c  = (float(line[4]) + float(line[6]))/2.
-		    y_c  = (float(line[5]) + float(line[7]))/2.
-#		    print("## {} \n## {}\n\n".format((x_c, y_c),center[:2]))
-		    center = center.astype(np.int16)
+		    print("\n############################################################################")
+		    t_obj = {'xmin':int(float(line[4])),
+			   'ymin':int(float(line[5])),
+			   'xmax':int(float(line[6])),
+			   'ymax':int(float(line[7])),}
 
-		    centers_2d.append(center)
-		    """
-		    line[11] = center[0]
-		    line[12] = center[1]
-		    """
-		    centers_3d.append(np.asarray([float(number) for number in line[11:14]]))
+		    t_center = np.asarray([(t_obj['xmin']+t_obj['xmax'])/2., (t_obj['ymin'] + t_obj['ymax'])/2.])
+
+		    world_x, world_y, world_z = depth_map.get_world_coordinates(image_file,t_center[1],t_center[0])
+		    t_cent3d = np.asarray([float(number) for number in [world_x, world_y, world_z]])
+		    centers_3d.append(t_cent3d)
+
+		    t_cent2d = np.append(t_cent3d, 1)
+		    t_cent2d = np.dot(cam_to_img, t_cent2d)
+		    t_cent2d = t_cent2d[:2]/t_cent2d[2]
+		    t_cent2d = t_cent2d.astype(np.int16)
+		    centers_2d.append(t_cent2d)
+
+		    print("############################################################################")
 
 		# Find the nearest centres among the candidates
 		for line in open(box3d_file):
@@ -119,10 +120,7 @@ def evaluate3d_detection():
 		center_xy = np.dot(cam_to_img, np.append(center, 1))
 		center_xy = center_xy[:2]/center_xy[2]
 		center_xy = center_xy.astype(np.int16)
-		print("========{}==================>{}".format(line[0],center_xy))
 		cneter_2d = np.asarray([(float(line[4])+float(line[6]))/2., (float(line[5])+float(line[7]))/2.])
-		depth_z = depth_map.get_depth_from_pixel(image_file,cneter_2d[0],cneter_2d[1])
-		print("========pixel: {}============gt: {}======>{}\n".format(cneter_2d, center[2], depth_z))
 		box_3d = []
 
 		for i in [1,-1]:

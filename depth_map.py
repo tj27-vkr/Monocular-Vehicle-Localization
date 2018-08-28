@@ -44,6 +44,7 @@ def post_process_disparity(disp):
     return r_mask * l_disp + l_mask * r_disp + (1.0 - l_mask - r_mask) * m_disp
 
 def test_simple(params):
+    import tensorflow as tf
     """Test function."""
 
     left  = tf.placeholder(tf.float32, [2, DEFAULT_HEIGHT, DEFAULT_WIDTH, 3])
@@ -51,8 +52,10 @@ def test_simple(params):
 
     input_image = scipy.misc.imread(IMAGE_PATH, mode="RGB")
     original_height, original_width, num_channels = input_image.shape
+    
     print("Original height: {} width: {}".format(original_height, original_width))
-    model = MonodepthModel(params, "test", left, None)
+    
+    model = MonodepthModel(params, "test", left, None, reuse_variables=tf.AUTO_REUSE)
     input_image = scipy.misc.imresize(input_image, [DEFAULT_HEIGHT, DEFAULT_WIDTH], interp='lanczos')
     input_image = input_image.astype(np.float32) / 255
     input_images = np.stack((input_image, np.fliplr(input_image)), 0)
@@ -60,7 +63,6 @@ def test_simple(params):
     # SESSION
     config = tf.ConfigProto(allow_soft_placement=True)
     sess = tf.Session(config=config)
-
     # SAVER
     train_saver = tf.train.Saver()
 
@@ -88,10 +90,11 @@ def test_simple(params):
     np.save(os.path.join(output_directory, "{}_disp.npy".format(output_name)), disp_pp)
     disp_to_img = scipy.misc.imresize(disp_pp.squeeze(), [original_height, original_width])
     plt.imsave(os.path.join(output_directory, "{}_disp.png".format(output_name)), disp_to_img, cmap='plasma')
+    sess.close()
     return disp_pp
 
-def get_depth_from_pixel(image_path, x_px, y_px):
-
+def get_world_coordinates(image_path, x_px, y_px):
+    print(image_path)
     params = monodepth_parameters(
         encoder=ENCODER,
         height=DEFAULT_HEIGHT,
@@ -117,14 +120,15 @@ def get_depth_from_pixel(image_path, x_px, y_px):
     #depth = focal_length * baseline / disparity
     mod_depth = 721.5377 * 0.54 / mod_disp
 
+    print("================= x:{} y:{} mod_depth:{}".format(x_px, y_px,mod_depth.shape))
     #x,y in world coordinates = xy_pixel * depth / focal_length
-    x_real_world = (x_px - (original_height/2.)) * mod_depth[x_px][y_px] / 721.5377
-    y_real_world = (y_px - (original_width/2.)) * mod_depth[x_px][y_px] / 721.5377
+    x_real_world = (x_px - (original_height/2.)) * mod_depth[int(x_px)][int(y_px)] / 721.5377
+    y_real_world = (y_px - (original_width/2.)) * mod_depth[int(x_px)][int(y_px)] / 721.5377
 
-    return x_real_world, y_real_world, mod_depth[x_px][y_px]
+    return x_real_world, y_real_world, mod_depth[int(x_px)][int(y_px)]
 
 
 if __name__ == '__main__':
     tx = 215
     ty = 723
-    print("Depth at {},{} : {}".format(tx, ty, get_depth_from_pixel(IMAGE_PATH, tx, ty)))
+    print("Depth at {},{} : {}".format(tx, ty, get_world_coordinates(IMAGE_PATH, tx, ty)))

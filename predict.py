@@ -6,128 +6,129 @@
 
 import cv2, os
 import numpy as np
+import tensorflow as tf
 
 from config import *
 import dn_model
+import depth_map
+#from depth_map import *
 
-def labels_parse(label_dir, image_dir):
-    all_objs = []
-    dims_avg = {key:np.array([0, 0, 0]) for key in VEHICLE_CLASSES}
-    dims_cnt = {key:0 for key in VEHICLE_CLASSES}
-        
-    for label_file in os.listdir(label_dir):
-        image_file = label_file.replace('txt', 'png')
+dims_avg = AVERAGE_DIMENSIONS
 
-        for line in open(label_dir + label_file).readlines():
-            line = line.strip().split(' ')
-            truncated = np.abs(float(line[1]))
-            occluded  = np.abs(float(line[2]))
+def get_camera_param(calib_file, cam_id):
+    calib_data = {}
+    with open(calib_file, 'r') as fp:
+        for line in fp.readlines():
+            key, value = line.split(":", 1)
+            value = value.strip()
+            try:
+                calib_data[key] = np.array(map(float, value.split(' ')))
+            except:
+                print("Skipping calib data key:{} value:{}".format(key, value))
+                pass
 
-            if line[0] in VEHICLE_CLASSES and truncated < 0.1 and occluded < 0.1:
-                new_alpha = float(line[3]) + np.pi/2.
-                if new_alpha < 0:
-                    new_alpha = new_alpha + 2.*np.pi
-                new_alpha = new_alpha - int(new_alpha/(2.*np.pi))*(2.*np.pi)
+    P2_rect = calib_data['P_rect_02'].reshape(3,4)
+    P3_rect = calib_data['P_rect_03'].reshape(3,4)
 
-                obj = {'name':line[0],
-                       'image':image_file,
-                       'xmin':int(float(line[4])),
-                       'ymin':int(float(line[5])),
-                       'xmax':int(float(line[6])),
-                       'ymax':int(float(line[7])),
-                       'dims':np.array([float(number) for number in line[8:11]]),
-                       'new_alpha': new_alpha
-                      }
-                
-                dims_avg[obj['name']]  = dims_cnt[obj['name']]*dims_avg[obj['name']] + obj['dims']
-                dims_cnt[obj['name']] += 1
-                dims_avg[obj['name']] /= dims_cnt[obj['name']]
+    b2 = P2_rect[0,3] / -P2_rect[0,0]
+    b3 = P3_rect[0,3] / -P3_rect[0,0]
+    baseline = b3-b2
+    
+    if cam_id == 2:
+        focal_length = P2_rect[0,0]
+    elif cam_id == 3:
+        focal_length = P3_rect[0,0]
 
-                all_objs.append(obj)
-            
-    return all_objs, dims_avg
+    print("Camera Parameters: baseline:{} focal_length:{}".format(baseline, focal_length))
 
-
-all_objs, dims_avg = labels_parse(label_dir, image_dir)
-
-
-
+    return baseline, focal_length
 
 
 def predict_images():
 
-	model = dn_model.network_arch()
-	print("Loading weights...")
-	model.load_weights('model/weights.hdf5')
-	print("Done...")
+    model_o = dn_model.network_arch()
+    print("Loading weights...")
+    model_o.load_weights('model/weights.hdf5')
+    print("Done...")
 
-	all_image = sorted(os.listdir(ex_image_dir))
+    all_image = sorted(os.listdir(ex_image_dir))
 
-	for f in all_image:
-	    image_file = ex_image_dir + f
-	    box2d_file = detection2d_dir + f.replace('png', 'txt')
-	    box3d_file = detection3d_dir + f.replace('png', 'txt')
-	    
-	    with open(box3d_file, 'w') as box3d:
-	        img = cv2.imread(image_file)
-	        img = img.astype(np.float32, copy=False)
+    for f in all_image:
+        image_file = ex_image_dir + f
+        box2d_file = detection2d_dir + f.replace('png', 'txt')
+        box3d_file = detection3d_dir + f.replace('png', 'txt')
+        
+        with open(box3d_file, 'w') as box3d:
+            img = cv2.imread(image_file)
+            img = img.astype(np.float32, copy=False)
+        
 
-	        for line in open(box2d_file):
-		    line = line.strip().split(' ')
-		    truncated = np.abs(float(line[1]))
-		    occluded  = np.abs(float(line[2]))
+            for line in open(box2d_file):
+                line = line.strip().split(' ')
+                
+                # This has to be modified to get the 2d boz coordinate from a simple
+                # object detection mode
+		######################################################
+		#################### OD ##############################
+		######################################################
+                obj = {'xmin':int(float(line[4])),
+                       'ymin':int(float(line[5])),
+                       'xmax':int(float(line[6])),
+                       'ymax':int(float(line[7])),
+                      }
+        
 
-		    obj = {'xmin':int(float(line[4])),
-			   'ymin':int(float(line[5])),
-			   'xmax':int(float(line[6])),
-			   'ymax':int(float(line[7])),
-			  }
+                cneter_2d = np.asarray([(obj['xmin']+obj['xmax'])/2., (obj['ymin'] + obj['ymax'])/2.])
 
-		    #cropping the image based on the 2d prediction
-		    patch = img[obj['ymin']:obj['ymax'],obj['xmin']:obj['xmax']]
-		    patch = cv2.resize(patch, (NORM_H, NORM_W))
 
-		    #normalizing the dataset by subtracting the mean pixel value
-		    patch = patch - np.array([[[103.939, 116.779, 123.68]]])
-		    patch = np.expand_dims(patch, 0)
-		    
-		    #run the model for 3d prediction
-		    prediction = model.predict(patch)
-		    #print("The prediction: {}".format(prediction))
+                #cropping the image based on the 2d prediction
+                patch = img[obj['ymin']:obj['ymax'],obj['xmin']:obj['xmax']]
+                patch = cv2.resize(patch, (NORM_H, NORM_W))
 
-		    # Transform regressed angle
-		    max_anc = np.argmax(prediction[2][0])
-		    anchors = prediction[1][0][max_anc]
+                #normalizing the dataset by subtracting the mean pixel value
+                patch = patch - np.array([[[103.939, 116.779, 123.68]]])
+                patch = np.expand_dims(patch, 0)
+                
+                #run the model for 3d prediction
+                
+                prediction = model_o.predict(patch)
+                #print("The prediction: {}".format(prediction))
 
-		    if anchors[1] > 0:
-			angle_offset = np.arccos(anchors[0])
-		    else:
-			angle_offset = -np.arccos(anchors[0])
+                # Transform regressed angle
+                max_anc = np.argmax(prediction[2][0])
+                anchors = prediction[1][0][max_anc]
 
-		    wedge = 2.*np.pi/BIN
-		    angle_offset = angle_offset + max_anc*wedge
-		    angle_offset = angle_offset % (2.*np.pi)
+                if anchors[1] > 0:
+                    angle_offset = np.arccos(anchors[0])
+                else:
+                    angle_offset = -np.arccos(anchors[0])
 
-		    angle_offset = angle_offset - np.pi/2
-		    if angle_offset > np.pi:
-			angle_offset = angle_offset - (2.*np.pi)
+                wedge = 2.*np.pi/BIN
+                angle_offset = angle_offset + max_anc*wedge
+                angle_offset = angle_offset % (2.*np.pi)
 
-		    line[3] = str(angle_offset)
+                angle_offset = angle_offset - np.pi/2
+                if angle_offset > np.pi:
+                    angle_offset = angle_offset - (2.*np.pi)
 
-		    # Transform regressed dimension
-		    dims = dims_avg['Car'] + prediction[0][0]
+                line[3] = str(angle_offset)
 
-		    line = line + list(dims)
-		    #print("$$$$${}".format(line))
+                # Transform regressed dimension
+                dims = dims_avg['Car'] + prediction[0][0]
 
-		    # Write regressed 3D dim and oritent to file
-		    line = ' '.join([str(item) for item in line]) + '\n'
-		    box3d.write(line)
+                line = line + list(dims)
+                #print("$$$$${}".format(line))
 
-		    cv2.rectangle(img, (obj['xmin'],obj['ymin']), (obj['xmax'],obj['ymax']), (255,0,0), 3)
-		    cv2.imwrite("example_data/output3d/{}".format(f),img)
-	    
-	    print("Output generated for image {}".format(f))
+                # Write regressed 3D dim and oritent to file
+                line = ' '.join([str(item) for item in line]) + '\n'
+                box3d.write(line)
+
+            cv2.rectangle(img, (obj['xmin'],obj['ymin']), (obj['xmax'],obj['ymax']), (255,0,0), 3)
+            cv2.imwrite("example_data/output3d/{}".format(f),img)
+        
+        print("Output generated for image {}".format(f))
+        #wx,wy,wz = get_world_coordinate_from_depth(image_file,cneter_2d[1],cneter_2d[0])
+        #print("============================================================================================>")
 
 
 
