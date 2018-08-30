@@ -11,6 +11,7 @@ import tensorflow as tf
 from config import *
 import dn_model
 import depth_map
+import ssd_detection
 #from depth_map import *
 
 dims_avg = AVERAGE_DIMENSIONS
@@ -39,8 +40,6 @@ def get_camera_param(calib_file, cam_id):
     elif cam_id == 3:
         focal_length = P3_rect[0,0]
 
-    print("Camera Parameters: baseline:{} focal_length:{}".format(baseline, focal_length))
-
     return baseline, focal_length
 
 
@@ -61,20 +60,19 @@ def predict_images():
         with open(box3d_file, 'w') as box3d:
             img = cv2.imread(image_file)
             img = img.astype(np.float32, copy=False)
-        
 
-            for line in open(box2d_file):
-                line = line.strip().split(' ')
+	    ssd_boxes_2d = ssd_detection.get_2d_box(image_file) 
+
+            for ssd_box in ssd_boxes_2d:
+	        line = []
+		line.append(0)
+		line.append(0)
+		line.append(0)
                 
-                # This has to be modified to get the 2d boz coordinate from a simple
-                # object detection mode
-		######################################################
-		#################### OD ##############################
-		######################################################
-                obj = {'xmin':int(float(line[4])),
-                       'ymin':int(float(line[5])),
-                       'xmax':int(float(line[6])),
-                       'ymax':int(float(line[7])),
+		obj = {'xmin':int(float(ssd_box[0])),
+                       'ymin':int(float(ssd_box[1])),
+                       'xmax':int(float(ssd_box[2])),
+                       'ymax':int(float(ssd_box[3])),
                       }
         
 
@@ -92,7 +90,6 @@ def predict_images():
                 #run the model for 3d prediction
                 
                 prediction = model_o.predict(patch)
-                #print("The prediction: {}".format(prediction))
 
                 # Transform regressed angle
                 max_anc = np.argmax(prediction[2][0])
@@ -111,13 +108,15 @@ def predict_images():
                 if angle_offset > np.pi:
                     angle_offset = angle_offset - (2.*np.pi)
 
-                line[3] = str(angle_offset)
+                line.append(str(angle_offset))
+                for t_i in ssd_box:
+		    line.append(t_i)
+
 
                 # Transform regressed dimension
                 dims = dims_avg['Car'] + prediction[0][0]
 
                 line = line + list(dims)
-                #print("$$$$${}".format(line))
 
                 # Write regressed 3D dim and oritent to file
                 line = ' '.join([str(item) for item in line]) + '\n'
@@ -127,9 +126,6 @@ def predict_images():
             cv2.imwrite("example_data/output3d/{}".format(f),img)
         
         print("Output generated for image {}".format(f))
-        #wx,wy,wz = get_world_coordinate_from_depth(image_file,cneter_2d[1],cneter_2d[0])
-        #print("============================================================================================>")
-
 
 
 if __name__ == "__main__":

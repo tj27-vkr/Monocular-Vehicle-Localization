@@ -48,12 +48,10 @@ def test_simple(params):
     """Test function."""
 
     left  = tf.placeholder(tf.float32, [2, DEFAULT_HEIGHT, DEFAULT_WIDTH, 3])
-    print("Input height: {} width:{}".format(DEFAULT_HEIGHT, DEFAULT_WIDTH))
 
     input_image = scipy.misc.imread(IMAGE_PATH, mode="RGB")
     original_height, original_width, num_channels = input_image.shape
     
-    print("Original height: {} width: {}".format(original_height, original_width))
     
     model = MonodepthModel(params, "test", left, None, reuse_variables=tf.AUTO_REUSE)
     input_image = scipy.misc.imresize(input_image, [DEFAULT_HEIGHT, DEFAULT_WIDTH], interp='lanczos')
@@ -77,11 +75,6 @@ def test_simple(params):
     train_saver.restore(sess, restore_path)
 
     disp = sess.run(model.disp_left_est[0], feed_dict={left: input_images})
-    print("#"*50)
-    print("disparity written... shape:{} {} {}".format(disp.shape, len(disp[0]), len(disp[1])))
-    print(len(disp))
-    print(len(disp[0]))
-    print(len(disp[1]))
     disp_pp = post_process_disparity(disp.squeeze()).astype(np.float32)
 
     output_directory = os.path.dirname(IMAGE_PATH)
@@ -94,7 +87,6 @@ def test_simple(params):
     return disp_pp
 
 def get_world_coordinates(image_path, x_px, y_px):
-    print(image_path)
     params = monodepth_parameters(
         encoder=ENCODER,
         height=DEFAULT_HEIGHT,
@@ -120,7 +112,6 @@ def get_world_coordinates(image_path, x_px, y_px):
     #depth = focal_length * baseline / disparity
     mod_depth = 721.5377 * 0.54 / mod_disp
 
-    print("================= x:{} y:{} mod_depth:{}".format(x_px, y_px,mod_depth.shape))
     #x,y in world coordinates = xy_pixel * depth / focal_length
     x_real_world = (x_px - (original_height/2.)) * mod_depth[int(x_px)][int(y_px)] / 721.5377
     y_real_world = (y_px - (original_width/2.)) * mod_depth[int(x_px)][int(y_px)] / 721.5377
@@ -131,4 +122,3 @@ def get_world_coordinates(image_path, x_px, y_px):
 if __name__ == '__main__':
     tx = 215
     ty = 723
-    print("Depth at {},{} : {}".format(tx, ty, get_world_coordinates(IMAGE_PATH, tx, ty)))

@@ -35,7 +35,6 @@ def evaluate3d_detection():
 		for line in open(box3d_file):
 		    line = line.strip().split(' ')
 
-		    print("\n############################################################################")
 		    t_obj = {'xmin':int(float(line[4])),
 			   'ymin':int(float(line[5])),
 			   'xmax':int(float(line[6])),
@@ -53,7 +52,6 @@ def evaluate3d_detection():
 		    t_cent2d = t_cent2d.astype(np.int16)
 		    centers_2d.append(t_cent2d)
 
-		    print("############################################################################")
 
 		# Find the nearest centres among the candidates
 		for line in open(box3d_file):
@@ -68,14 +66,11 @@ def evaluate3d_detection():
 
 		    nearest_index = -1
 		    last_distance = 1000000000.
-		    #print ("the center for 2d is {}".format(centers_2d))
 
 		    for i in xrange(len(centers_2d)):
 			candidate = centers_2d[i]
 			distance = np.sum(np.square(center - candidate))
-			#print("the distance is {} and last is {}".format(distance, last_distance))
 			if distance < 2000 and distance < last_distance:
-			    #print ("nearest index hit")
 			    nearest_index = i
 			    last_distance = distance
 
@@ -86,11 +81,7 @@ def evaluate3d_detection():
 			
 			# Write regressed 3D dim and oritent to file
 			line = ' '.join([str(item) for item in line]) + '\n'
-			print("prediction writen.")
 			prediction.write(line)
-
-
-	print("Done !! ")
 
 
 	all_image = sorted(os.listdir(ex_image_dir))
@@ -133,7 +124,6 @@ def evaluate3d_detection():
 
 			    point = np.append(point, 1)
 			    point = np.dot(cam_to_img, point)
-			    #print("point on cam {}".format(point))
 			    point = point[:2]/point[2]
 			    point = point.astype(np.int16)
 			    box_3d.append(point)
@@ -148,7 +138,6 @@ def evaluate3d_detection():
 		    point_2_ = box_3d[(i+2)%8]
 		    cv2.line(image, (point_1_[0], point_1_[1]), (point_2_[0], point_2_[1]), (0,255,0), 2)
 			
-	    #video_writer.write(np.uint8(image))
 	    cv2.imwrite("example_data/output_predi/{}".format(f),image)
 	    print ("{} generated.".format(f))
 

@@ -29,7 +29,7 @@ categories = label_map_util.convert_label_map_to_categories(label_map, max_num_c
 category_index = label_map_util.create_category_index(categories)
 
 def get_2d_box(image_path):
-	image_np = cv2.imread('000011.png')
+	image_np = cv2.imread(image_path)
 	im_w, im_h, _ = image_np.shape
 
 	detection_graph = tf.Graph()

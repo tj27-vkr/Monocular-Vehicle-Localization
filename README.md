@@ -40,7 +40,8 @@ export PYTHONPATH=$PYTHONPATH:`pwd`
 python main.py --mode=train
 
 #evaluate example images
-python main.py --mode=predict
+python predict.py
+python evaluation.py
 ```
 
 ## Dataset 
